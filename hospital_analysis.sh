@@ -112,3 +112,5 @@ process_vitals
 water_audit
 
 echo "Analysis Complete."
+
+# End of hospital_analysis.sh
