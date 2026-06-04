@@ -29,3 +29,4 @@ Coding-lab_Group21/
 ├── archived_logs/          # Rotated logs with timestamps
 ├── reports/                # Generated reports and alerts
 └── README.md               # This file
+Member 5 - Clinical Analyst contribution
