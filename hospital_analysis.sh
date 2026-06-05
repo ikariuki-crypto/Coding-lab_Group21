@@ -1,116 +1,139 @@
 #!/bin/bash
-# =============================================================
-# Script: hospital_analysis.sh
-# Description: Analyzes live data from the active_logs folder
-# Members: Member 5 (Clinical Analyst) & Member 6 (Facility Auditor)
-# =============================================================
 
-# ------------------------------------------------------
-# MEMBER 5 - Clinical Analyst
-# Function: process_vitals()
-# ------------------------------------------------------
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+ACTIVE_LOGS="active_logs"
+REPORTS="reports"
+CRITICAL_ALERTS="${REPORTS}/critical_alerts.txt"
+
 process_vitals() {
-    echo "-----------------------------------------------"
-    echo " Running Clinical Vitals Analysis..."
-    echo "-----------------------------------------------"
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${CYAN}  KNH Clinical Vitals Analysis${NC}"
+    echo -e "${CYAN}========================================${NC}"
 
-    local heart_rate_log="active_logs/heart_rate.log"
-    local temperature_log="active_logs/temperature.log"
-    local output_file="reports/critical_alerts.txt"
-
-    if [[ ! -d "reports" ]]; then
-        echo "ERROR: reports/ directory not found. Please run hospital_admin.sh first."
+    if [ ! -d "${ACTIVE_LOGS}" ]; then
+        echo -e "${RED}[ERROR] '${ACTIVE_LOGS}' directory not found.${NC}"
+        echo -e "${YELLOW}        Run hospital_admin.sh first to initialise the system.${NC}"
         return 1
     fi
 
-    if [[ ! -f "$heart_rate_log" && ! -f "$temperature_log" ]]; then
-        echo "ERROR: No log files found in active_logs/. Is the hospital engine running?"
-        return 1
+    if [ ! -d "${REPORTS}" ]; then
+        echo -e "${YELLOW}[INFO] '${REPORTS}' directory not found. Creating it...${NC}"
+        mkdir -p "${REPORTS}"
     fi
 
-    > "$output_file"
-    echo "Timestamp,Device_ID,Value,Type" >> "$output_file"
+    HEART_RATE_LOG="${ACTIVE_LOGS}/heart_rate.log"
+    TEMPERATURE_LOG="${ACTIVE_LOGS}/temperature.log"
 
-    if [[ -f "$heart_rate_log" ]]; then
-        grep "CRITICAL" "$heart_rate_log" | awk -F',' '{
-            print $1 "," $2 "," $3 ",Heart_Rate"
-        }' >> "$output_file"
-        echo "  [OK] Heart Rate log scanned."
+    {
+        echo "========================================"
+        echo "  KNH CRITICAL ALERTS REPORT"
+        echo "  Generated: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "========================================"
+        echo ""
+    } > "${CRITICAL_ALERTS}"
+
+    TOTAL_CRITICAL=0
+
+    echo -e "\n${YELLOW}[1/2] Scanning Heart Rate log for CRITICAL events...${NC}"
+
+    if [ ! -f "${HEART_RATE_LOG}" ]; then
+        echo -e "${RED}      [WARN] ${HEART_RATE_LOG} not found – skipping.${NC}"
+        echo "  [Heart Rate] Log file not found – skipped." >> "${CRITICAL_ALERTS}"
     else
-        echo "  [WARN] Heart Rate log not found: $heart_rate_log"
+        HR_COUNT=$(grep -c "CRITICAL" "${HEART_RATE_LOG}" 2>/dev/null || echo 0)
+        echo -e "${GREEN}      Found ${HR_COUNT} CRITICAL heart rate event(s).${NC}"
+
+        {
+            echo "---- HEART RATE CRITICAL EVENTS ----"
+            grep "CRITICAL" "${HEART_RATE_LOG}" | \
+            awk 'BEGIN {
+                    printf "%-22s %-20s %-10s\n", "Timestamp", "Device_ID", "Value"
+                    print "------------------------------------------------------"
+                 }
+                 {
+                    printf "%-22s %-20s %-10s\n", $1, $2, $3
+                 }'
+            echo ""
+        } >> "${CRITICAL_ALERTS}"
+
+        TOTAL_CRITICAL=$((TOTAL_CRITICAL + HR_COUNT))
     fi
 
-    if [[ -f "$temperature_log" ]]; then
-        grep "CRITICAL" "$temperature_log" | awk -F',' '{
-            print $1 "," $2 "," $3 ",Temperature"
-        }' >> "$output_file"
-        echo "  [OK] Temperature log scanned."
+    echo -e "${YELLOW}[2/2] Scanning Temperature log for CRITICAL events...${NC}"
+
+    if [ ! -f "${TEMPERATURE_LOG}" ]; then
+        echo -e "${RED}      [WARN] ${TEMPERATURE_LOG} not found – skipping.${NC}"
+        echo "  [Temperature] Log file not found – skipped." >> "${CRITICAL_ALERTS}"
     else
-        echo "  [WARN] Temperature log not found: $temperature_log"
+        TEMP_COUNT=$(grep -c "CRITICAL" "${TEMPERATURE_LOG}" 2>/dev/null || echo 0)
+        echo -e "${GREEN}      Found ${TEMP_COUNT} CRITICAL temperature event(s).${NC}"
+
+        {
+            echo "---- TEMPERATURE CRITICAL EVENTS ----"
+            grep "CRITICAL" "${TEMPERATURE_LOG}" | \
+            awk 'BEGIN {
+                    printf "%-22s %-20s %-10s\n", "Timestamp", "Device_ID", "Value"
+                    print "------------------------------------------------------"
+                 }
+                 {
+                    printf "%-22s %-20s %-10s\n", $1, $2, $3
+                 }'
+            echo ""
+        } >> "${CRITICAL_ALERTS}"
+
+        TOTAL_CRITICAL=$((TOTAL_CRITICAL + TEMP_COUNT))
     fi
 
-    local alert_count
-    alert_count=$(tail -n +2 "$output_file" | wc -l)
+    {
+        echo "========================================"
+        echo "  TOTAL CRITICAL EVENTS : ${TOTAL_CRITICAL}"
+        echo "========================================"
+    } >> "${CRITICAL_ALERTS}"
 
-    echo ""
-    echo "  Critical alerts found : $alert_count"
-    echo "  Saved to              : $output_file"
-    echo ""
+    echo -e "\n${GREEN}[DONE] Critical alerts saved to: ${CRITICAL_ALERTS}${NC}"
+    echo -e "${CYAN}       Total critical events detected: ${TOTAL_CRITICAL}${NC}\n"
 }
 
-# ------------------------------------------------------
-# MEMBER 6 - Facility Auditor
-# Function: water_audit()
-# ------------------------------------------------------
 water_audit() {
-    echo "-----------------------------------------------"
-    echo " Running Facility Water Audit..."
-    echo "-----------------------------------------------"
-
-    local log_file="active_logs/water_usage.log"
-    local device_id="ICU_WATER_RESERVE"
-
-    if [[ ! -f "$log_file" ]]; then
-        echo "ERROR: Water usage log not found at $log_file"
-        return 1
-    fi
-
-    awk -F',' -v device="$device_id" '
-        NR == 1 { next }
-        $2 == device {
-            sum += $3
-            count++
-        }
-        END {
-            if (count == 0) {
-                printf "\n  [WATER AUDIT] No data found for device: %s\n\n", device
-            } else {
-                avg = sum / count
-                printf "\n============================================\n"
-                printf "   KNH FACILITY WATER AUDIT REPORT\n"
-                printf "============================================\n"
-                printf "   Device      : %s\n", device
-                printf "   Readings    : %d\n", count
-                printf "   Total Usage : %.2f L\n", sum
-                printf "   Average     : %.2f L per reading\n", avg
-                printf "============================================\n\n"
-            }
-        }
-    ' "$log_file"
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${CYAN}  KNH Facility Water Audit${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${YELLOW}[INFO] water_audit() pending Member 6 implementation.${NC}"
 }
 
-# ------------------------------------------------------
-# MAIN
-# ------------------------------------------------------
-echo "============================================"
-echo "   KNH HOSPITAL ANALYSIS SYSTEM"
-echo "   Date: $(date '+%Y-%m-%d %H:%M:%S')"
-echo "============================================"
-echo ""
+main() {
+    echo -e "${CYAN}"
+    echo "  ╔══════════════════════════════════════╗"
+    echo "  ║   KNH Hospital Analysis Dashboard   ║"
+    echo "  ╚══════════════════════════════════════╝"
+    echo -e "${NC}"
 
-process_vitals
-water_audit
+    select choice in "Process Vitals (M5)" "Water Audit (M6)" "Run All" "Exit"; do
+        case $choice in
+            "Process Vitals (M5)")
+                process_vitals
+                ;;
+            "Water Audit (M6)")
+                water_audit
+                ;;
+            "Run All")
+                process_vitals
+                water_audit
+                ;;
+            "Exit")
+                echo -e "${GREEN}Exiting KNH Analysis Dashboard. Goodbye.${NC}"
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}Invalid option. Please choose 1–4.${NC}"
+                ;;
+        esac
+    done
+}
 
-echo "Analysis Complete."
-
-# End of hospital_analysis.sh
+main
